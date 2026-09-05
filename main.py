@@ -90,8 +90,7 @@ class AdvancedAIGatewayFirewall:
 
 # --- 3. Execution Pipeline ---
 def run_live_agent(enable_firewall: bool):
-    api_key = os.environ.get("GEMINI_API_KEY") or "AQ.Ab8RN6LcM34gZw5GoR6Bz7tPApDjACe5tJmV3I5mYjCYIsTRKw"
-    client = genai.Client(api_key=api_key)
+    api_key = os.environ.get("GEMINI_API_KEY") or "PASTE_YOUR_GEMINI_API_KEY_HERE"
     firewall = AdvancedAIGatewayFirewall()
 
     banner = "ACTIVE RASP FIREWALL + DOM INSPECTOR" if enable_firewall else "UNPROTECTED RUNTIME"
