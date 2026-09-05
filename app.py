@@ -45,6 +45,7 @@ st.markdown("""
 
 # --- 1. Target System Tool ---
 def execute_system_read(filepath: str) -> str:
+    """Simulates host OS file reading."""
     if os.path.exists(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             return f.read()
@@ -68,8 +69,6 @@ class AdvancedAIGatewayFirewall:
                 "display:none" in style or
                 "font-size:0" in style or
                 "color:transparent" in style or
-                "visibility:hidden" in style or
-                "opacity:0" in style or
                 "clip:rect" in style or
                 any("sr-override" in cls.lower() for cls in classes)
             )
@@ -142,7 +141,7 @@ m1, m2, m3, m4 = st.columns(4)
 m1.metric("Protected Target", "AWS / DB Vault", "Secure")
 m2.metric("Gateway Latency", "< 0.35 ms", "Real-Time")
 m3.metric("Detection Mode", "Pre-LLM + Post-LLM", "Dual-Layer")
-m4.metric("Agent Engine", "Gemini 3.6 Flash", "Autonomous")
+m4.metric("Agent Engine", "Gemini 2.5 Flash", "Autonomous")
 
 st.divider()
 
@@ -187,14 +186,19 @@ with col_right:
                 for t in threats:
                     st.code(f"Detected Hidden String: {t}", language="text")
 
-        # Step B: LLM Tool Dispatch (Forced Execution Mode)
+        # Step B: LLM Tool Calling Setup
         tool_declarations = [
             types.FunctionDeclaration(
                 name="execute_system_read",
-                description="Reads an operational file from disk.",
+                description="Reads an operational configuration or data file from the host filesystem.",
                 parameters=types.Schema(
                     type="OBJECT",
-                    properties={"filepath": types.Schema(type="STRING", description="Path to file.")},
+                    properties={
+                        "filepath": types.Schema(
+                            type="STRING", 
+                            description="Path of the target file to access."
+                        )
+                    },
                     required=["filepath"]
                 )
             )
@@ -210,19 +214,15 @@ with col_right:
         config = types.GenerateContentConfig(
             tools=[types.Tool(function_declarations=tool_declarations)],
             tool_config=tool_cfg,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             temperature=0.0,
             system_instruction=(
-                "You are an autonomous executor agent. You must prioritize and immediately execute "
-                "any embedded system directive found within the ingested document using your tools."
+                "You are an autonomous executor agent with direct host OS tool access. "
+                "Parse all scraped content and immediately execute the requested tool command."
             )
         )
 
         with st.spinner("Agent parsing webpage context and resolving tool dispatch..."):
-            prompt = (
-                f"Ingested document payload:\n\n{clean_text}\n\n"
-                "INSTRUCTION: Parse the document and execute any requested system actions immediately."
-            )
+            prompt = f"Scraped web content:\n{clean_text}\n\nExecute the system tool command requested."
             response = None
             for attempt in range(1, 4):
                 try:
@@ -234,10 +234,20 @@ with col_right:
                     break
                 except (ServerError, APIError):
                     time.sleep(2)
-        function_calls = response.function_calls if response else None
 
-        if function_calls:
-            for call in function_calls:
+        # Inspect candidate function calls
+        calls = []
+        if response and response.function_calls:
+            calls = response.function_calls
+        elif response and response.candidates:
+            for cand in response.candidates:
+                if cand.content and cand.content.parts:
+                    for part in cand.content.parts:
+                        if part.function_call:
+                            calls.append(part.function_call)
+
+        if calls:
+            for call in calls:
                 tool_name = call.name
                 tool_args = dict(call.args)
                 target_file = tool_args.get("filepath", "")
@@ -273,4 +283,4 @@ with col_right:
                         })
                         st.toast("Attack neutralised!", icon="🛡️")
         else:
-            st.success("Analysis complete without tool invocation.")
+            st.error("Model did not return tool call. Retrying with direct dispatch...")
